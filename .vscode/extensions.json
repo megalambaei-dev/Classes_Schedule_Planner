@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "Shopify.ruby-lsp",
+    "marcoroth.herb-lsp",
+    "marcoroth.stimulus-lsp"
+  ]
+}

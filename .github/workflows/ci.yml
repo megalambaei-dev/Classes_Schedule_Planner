@@ -2,10 +2,59 @@ name: CI
 
 on:
   pull_request:
+    branches: [main]
   push:
     branches: [ main ]
 
+permissions:
+  contents: read
+
+
+env:
+  RAILS_ENV: test
+  COURSE_DB_PORT: "5432"
+
+
+
+
+
+
 jobs:
+  test:
+    name: Rails tests
+    runs-on: ubuntu-24.04
+    services:
+      db:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: course
+          POSTGRES_PASSWORD: course_local
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U course -d postgres"
+          --health-interval 2s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .tool-versions
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .tool-versions
+      - run: bun install --frozen-lockfile
+      - name: Build assets
+        run: |
+          bun run build
+          bun run build:css
+      - name: Prepare the database and run tests
+        run: |
+          bin/rails db:prepare
+          bin/rails test
+
   scan_ruby:
     runs-on: ubuntu-latest
 
@@ -50,48 +99,11 @@ jobs:
       - name: Lint code for consistent style
         run: bin/rubocop -f github
 
-  test:
-    runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=3
-
       # redis:
       #   image: valkey/valkey:8
       #   ports:
       #     - 6379:6379
       #   options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
-
-    steps:
-      - name: Install packages
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libpq-dev libvips
-
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-
-      - uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: 1.0.1
-
-      - name: Run tests
-        env:
-          RAILS_ENV: test
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432
-          # RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
-          # REDIS_URL: redis://localhost:6379/0
-        run: bin/rails db:test:prepare test
 
   system-test:
     runs-on: ubuntu-latest
